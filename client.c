@@ -5,7 +5,8 @@
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
 
-#define RCVBUFSIZE 32   /* Size of receive buffer */
+#define BUFFSIZE 32   /* Size of buffer for received message */
+#define MAXSIZE 32    /* Max size for command to send */
 
 void DieWithError(char *errorMessage);  /* Error handling function */
 
@@ -15,26 +16,23 @@ int main(int argc, char *argv[])
     struct sockaddr_in echoServAddr; /* Echo server address */
     unsigned short echoServPort;     /* Echo server port */
     char *servIP;                    /* Server IP address (dotted quad) */
-    char *echoString;                /* String to send to echo server */
-    char echoBuffer[RCVBUFSIZE];     /* Buffer for echo string */
-    unsigned int echoStringLen;      /* Length of string to echo */
+    char cmd[MAXSIZE];               /* Buffer for command to send */
+    unsigned int cmdLen;             /* Length of command to send */
+    char buffer[BUFFSIZE];           /* Buffer for received message */
+    unsigned int buffLen;            /* Length of received message */
     int bytesRcvd, totalBytesRcvd;   /* Bytes read in single recv() 
                                         and total bytes read */
-
-    if ((argc < 3) || (argc > 4))    /* Test for correct number of arguments */
+    printf("%d\n", argc);
+    if ((argc < 3) || (argc > 3))    /* Test for correct number of arguments */
     {
-       fprintf(stderr, "Usage: %s <Server IP> <Echo Word> [<Echo Port>]\n",
+       fprintf(stderr, "Usage: %s <Server IP> <Echo Port>\n",
                argv[0]);
        exit(1);
     }
 
-    servIP = argv[1];             /* First arg: server IP address (dotted quad) */
-    echoString = argv[2];         /* Second arg: string to echo */
+    servIP = argv[1];              /* First arg: server IP address (dotted quad) */
+    echoServPort = atoi(argv[2]);  /* Second arg: remote port to connect */
 
-    if (argc == 4)
-        echoServPort = atoi(argv[3]); /* Use given port, if any */
-    else
-        echoServPort = 7;  /* 7 is the well-known port for the echo service */
 
     /* Create a reliable, stream socket using TCP */
     if ((sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
@@ -50,25 +48,43 @@ int main(int argc, char *argv[])
     if (connect(sock, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) < 0)
         DieWithError("connect() failed");
 
-    echoStringLen = strlen(echoString);          /* Determine input length */
 
-    /* Send the string to the server */
-    if (send(sock, echoString, echoStringLen, 0) != echoStringLen)
-        DieWithError("send() sent a different number of bytes than expected");
+    while(1){
+        fgets(cmd, MAXSIZE, stdin); /* Read command from stdin */
+        cmdLen = strlen(cmd);
+        cmd[cmdLen - 1] = '\0'; /* fgets() does not automatically discard new line */
+        
+        /* Send the command to the server */
+        if (send(sock, cmd, cmdLen, 0) != cmdLen)
+            DieWithError("send() sent a different number of bytes than expected");
+        if(strcmp(cmd, "exit") == 0) /* Check if exit is typed */
+            break;
 
-    /* Receive the same string back from the server */
-    totalBytesRcvd = 0;
-    printf("Received: ");                /* Setup to print the echoed string */
-    while (totalBytesRcvd < echoStringLen)
-    {
-        /* Receive up to the buffer size (minus 1 to leave space for
-           a null terminator) bytes from the sender */
-        if ((bytesRcvd = recv(sock, echoBuffer, RCVBUFSIZE - 1, 0)) <= 0)
-            DieWithError("recv() failed or connection closed prematurely");
-        totalBytesRcvd += bytesRcvd;   /* Keep tally of total bytes */
-        echoBuffer[bytesRcvd] = '\0';  /* Terminate the string! */
-        printf(echoBuffer);            /* Print the echo buffer */
+        /* Receive the same string back from the server */
+        totalBytesRcvd = 0;
+        bytesRcvd = 0;
+        printf("Received: ");                /* Setup to print the echoed string */
+        // while (totalBytesRcvd < echoStringLen)
+        // {
+        //     /* Receive up to the buffer size (minus 1 to leave space for
+        //     a null terminator) bytes from the sender */
+        //     if ((bytesRcvd = recv(sock, echoBuffer, RCVBUFSIZE - 1, 0)) <= 0)
+        //         DieWithError("recv() failed or connection closed prematurely");
+        //     totalBytesRcvd += bytesRcvd;   /* Keep tally of total bytes */
+        //     echoBuffer[bytesRcvd] = '\0';  /* Terminate the string! */
+        //     printf(echoBuffer);            /* Print the echo buffer */
+        // }
+        do {
+            buffer[bytesRcvd] = '\0';
+            printf("%s\n", buffer);
+        } while((bytesRcvd = recv(sock, buffer, BUFFSIZE-1, 0))>=BUFFSIZE-1);
+        buffer[bytesRcvd] = '\0';
+        printf("%s\n", buffer);
     }
+
+  
+
+  
 
     printf("\n");    /* Print a final linefeed */
 
