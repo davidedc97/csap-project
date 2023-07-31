@@ -36,15 +36,54 @@ void HandleTCPClient(int clntSocket)
         //     cmdSize += recvCmdSize;
         // }
 
-        printf("Received %s\n", cmd);
+        printf("Received: %s\n", cmd);
         cmdSize = strlen(cmd);
 
         /* Echo message back to client */
-        if (send(clntSocket, cmd, cmdSize, 0) != cmdSize)
-            DieWithError("send() failed");
-        
-        if(strcmp(cmd, "exit") == 0) /* Check if exit is typed */
+        // if (send(clntSocket, cmd, cmdSize, 0) != cmdSize)
+        //     DieWithError("send() failed");
+
+        /* Tokenize received command */
+        const char s[4] = " \t\n";
+        char *token;
+        token = strtok(cmd, s); /* First token */
+
+        printf("Token: %s\n", token);
+        printf("Cmd: %s\n", cmd);
+
+        /* "Switch case" on command */
+        if(strcmp(cmd, "copy") == 0) {
+            ;
+        }
+        else if(strcmp(cmd, "move") == 0) {
+            ;
+        }
+        else if(strcmp(cmd, "delete") == 0) {
+            ;
+        }
+        else if(strcmp(cmd, "list") == 0) {
+            ;
+        }
+        else if(strcmp(cmd, "create_dir") == 0) {
+            ;
+        }
+        else if(strcmp(cmd, "delete_dir") == 0) {
+            ;
+        }
+        else if(strcmp(cmd, "cd") == 0) {
+            ;
+        }
+        else if(strcmp(cmd, "exit") == 0) {
             break;
+        }
+        else{
+            printf("inside else\n");
+            const char* msg = "Invalid command";
+            if (send(clntSocket, msg, strlen(msg), 0) != strlen(msg))
+                DieWithError("send() failed");
+        }
+
+
     }
 
     close(clntSocket);    /* Close client socket */

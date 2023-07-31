@@ -22,7 +22,6 @@ int main(int argc, char *argv[])
     unsigned int buffLen;            /* Length of received message */
     int bytesRcvd, totalBytesRcvd;   /* Bytes read in single recv() 
                                         and total bytes read */
-    printf("%d\n", argc);
     if ((argc < 3) || (argc > 3))    /* Test for correct number of arguments */
     {
        fprintf(stderr, "Usage: %s <Server IP> <Echo Port>\n",
