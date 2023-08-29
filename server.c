@@ -8,6 +8,8 @@
 #include <signal.h>     /* for sigaction() */
 
 #define MAXPENDING 5    /* Maximum outstanding connection requests */
+#define MAXPATHSIZE 512 /* Maximum size of root path */
+#define MAXCMDS 64      /* Maximum number of additional commands */
 
 void DieWithError(char *errorMessage);  /* Error handling function */
 void HandleTCPClient(int clntSocket);   /* TCP client handling function */
@@ -15,61 +17,12 @@ void ChildExitSignalHandler();     /* Function to clean up zombie child processe
 int CreateTCPServerSocket(unsigned short port); /* Create TCP server socket */
 int AcceptTCPConnection(int servSock);  /* Accept TCP connection request */
 
-
-// int main(int argc, char *argv[])
-// {
-//     int servSock;                    /* Socket descriptor for server */
-//     int clntSock;                    /* Socket descriptor for client */
-//     struct sockaddr_in echoServAddr; /* Local address */
-//     struct sockaddr_in echoClntAddr; /* Client address */
-//     unsigned short echoServPort;     /* Server port */
-//     unsigned int clntLen;            /* Length of client address data structure */
-
-//     if (argc != 2)     /* Test for correct number of arguments */
-//     {
-//         fprintf(stderr, "Usage:  %s <Server Port>\n", argv[0]);
-//         exit(1);
-//     }
-
-//     echoServPort = atoi(argv[1]);  /* First arg:  local port */
-
-//     /* Create socket for incoming connections */
-//     if ((servSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-//         DieWithError("socket() failed");
-      
-//     /* Construct local address structure */
-//     memset(&echoServAddr, 0, sizeof(echoServAddr));   /* Zero out structure */
-//     echoServAddr.sin_family = AF_INET;                /* Internet address family */
-//     echoServAddr.sin_addr.s_addr = htonl(INADDR_ANY); /* Any incoming interface */
-//     echoServAddr.sin_port = htons(echoServPort);      /* Local port */
-
-//     /* Bind to the local address */
-//     if (bind(servSock, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) < 0)
-//         DieWithError("bind() failed");
-
-//     /* Mark the socket so it will listen for incoming connections */
-//     if (listen(servSock, MAXPENDING) < 0)
-//         DieWithError("listen() failed");
-
-//     for (;;) /* Run forever */
-//     {
-//         /* Set the size of the in-out parameter */
-//         clntLen = sizeof(echoClntAddr);
-
-//         /* Wait for a client to connect */
-//         if ((clntSock = accept(servSock, (struct sockaddr *) &echoClntAddr, 
-//                                &clntLen)) < 0)
-//             DieWithError("accept() failed");
-
-//         /* clntSock is connected to a client! */
-
-//         printf("Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
-
-//         HandleTCPClient(clntSock);
-//     }
-//     /* NOT REACHED */
-// }
-
+/* Define a struct to contain configuration variables */
+typedef struct config {
+  int port;
+  char rootPath[MAXPATHSIZE];
+  char* commands[MAXCMDS];
+} CONFIG;
 
 /* Global so accessable by SIGCHLD signal handler */
 unsigned int childProcCount = 0;   /* Number of child processes */
@@ -84,9 +37,38 @@ int main(int argc, char *argv[])
  
     if (argc != 2)     /* Test for correct number of arguments */
     {
-        fprintf(stderr, "Usage:  %s <Server Port>\n", argv[0]);
+        fprintf(stderr, "Usage:  %s <CONFIG_FILE>\n", argv[0]);
         exit(1);
     }
+
+    /* Read and parse config file */
+    FILE* f = fopen(argv[1], "r");
+
+    if(f == NULL){
+        fprintf(stderr, "Cannot open CONFIG_FILE provided\n", argv[0]);
+        exit(1);
+    }
+
+    char* line = NULL;
+    int len = 0;
+    int bytes = 0;
+    CONFIG config;
+
+    /* PORT */
+    read = getline(&line, &len, f);
+    read = getline(&line, &len, f);
+    config->port = atoi(line);
+    /* ROOT */
+    read = getline(&line, &len, f);
+    read = getline(&line, &len, f);
+    strcpy(config->rootPath, line);
+    /* COMMANDS */
+    read = getline(&line, &len, f);
+    while ((read = getline(&line, &len, fp)) != -1) {
+        printf("Retrieved line of length %zu:\n", read);
+        printf("%s", line);
+    }
+
 
     echoServPort = atoi(argv[1]);  /* First arg:  local port */
 

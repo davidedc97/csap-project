@@ -1,0 +1,8 @@
+#Port
+8000
+#Root
+/tmp
+#Cmds
+sort
+cat
+sh256sum
