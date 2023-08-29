@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
             exit(0);              /* Child process done */
         }
 
-	printf("with child process: %d\n", (int) processID);
+	    printf("with child process: %d\n", (int) processID);
         close(clntSock);       /* Parent closes child socket descriptor */
         childProcCount++;      /* Increment number of outstanding child processes */
     }

@@ -5,8 +5,8 @@
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
 
-#define BUFFSIZE 32   /* Size of buffer for received message */
-#define MAXSIZE 32    /* Max size for command to send */
+#define BUFFSIZE 1024   /* Size of buffer for received message */
+#define MAXSIZE 1024    /* Max size for command to send */
 
 void DieWithError(char *errorMessage);  /* Error handling function */
 
@@ -48,6 +48,17 @@ int main(int argc, char *argv[])
         DieWithError("connect() failed");
 
 
+    totalBytesRcvd = 0;
+    bytesRcvd = 0;
+    printf("Received: ");                /* Setup to print the echoed string */
+    
+    do {
+        buffer[bytesRcvd] = '\0';
+        printf("%s\n", buffer);
+    } while((bytesRcvd = recv(sock, buffer, BUFFSIZE-1, 0))>=BUFFSIZE-1);
+    buffer[bytesRcvd] = '\0';
+    printf("%s\n", buffer);
+
     while(1){
         fgets(cmd, MAXSIZE, stdin); /* Read command from stdin */
         cmdLen = strlen(cmd);
@@ -86,6 +97,7 @@ int main(int argc, char *argv[])
   
 
     printf("\n");    /* Print a final linefeed */
+    printf("Closing connection\n");
 
     close(sock);
     exit(0);
