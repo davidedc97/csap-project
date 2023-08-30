@@ -6,9 +6,12 @@
 #include <unistd.h>     /* for close() */
 #include <sys/wait.h>   /* for waitpid() */
 #include <signal.h>     /* for sigaction() */
+#include <dirent.h>     /* for directory checks */
+#include <errno.h>
 
 #define MAXPENDING 5    /* Maximum outstanding connection requests */
 #define MAXPATHSIZE 512 /* Maximum size of root path */
+#define MAXLINESIZE 512 /* Maximum size of line in conf */
 #define MAXCMDS 64      /* Maximum number of additional commands */
 
 void DieWithError(char *errorMessage);  /* Error handling function */
@@ -17,23 +20,22 @@ void ChildExitSignalHandler();     /* Function to clean up zombie child processe
 int CreateTCPServerSocket(unsigned short port); /* Create TCP server socket */
 int AcceptTCPConnection(int servSock);  /* Accept TCP connection request */
 
-/* Define a struct to contain configuration variables */
-typedef struct config {
-  int port;
-  char rootPath[MAXPATHSIZE];
-  char* commands[MAXCMDS];
-} CONFIG;
+
 
 /* Global so accessable by SIGCHLD signal handler */
 unsigned int childProcCount = 0;   /* Number of child processes */
 
 int main(int argc, char *argv[])
 {
-    int servSock;                    /* Socket descriptor for server */
-    int clntSock;                    /* Socket descriptor for client */
-    unsigned short echoServPort;     /* Server port */
-    pid_t processID;                 /* Process ID from fork() */
-    struct sigaction myAction;       /* Signal handler specification structure */
+    int servSock;                        /* Socket descriptor for server */
+    int clntSock;                        /* Socket descriptor for client */
+    unsigned short echoServPort;         /* Server port */
+    pid_t processID;                     /* Process ID from fork() */
+    struct sigaction myAction;           /* Signal handler specification structure */
+    int port;                            /* Listening port */
+    char line[MAXLINESIZE];              /* Buffer for reading config file */
+    char rootPath[MAXPATHSIZE];          /* Root path */
+    char commands[MAXCMDS][MAXLINESIZE]; /* List of additional commands */
  
     if (argc != 2)     /* Test for correct number of arguments */
     {
@@ -48,39 +50,40 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Cannot open CONFIG_FILE provided\n");
         exit(1);
     }
-
-    char line[MAXPATHSIZE];
-    size_t len = 0;
-    int bytes = 0;
-    CONFIG* conf = (CONFIG*)malloc(sizeof(CONFIG));
-
-    printf("arrivo qui\n");
+    
     /* PORT */
-    fgets(line, MAXPATHSIZE, f);
-    printf("Line: %s\n", line);
-    fgets(line, MAXPATHSIZE, f);
-    printf("Line: %s\n", line);
-    printf("Cast: %d\n", atoi(line));
-    conf->port = atoi(line);
-    printf("conf->port: %d\n", conf->port);
-    /* ROOT */
-    fgets(line, MAXPATHSIZE, f);
-    printf("Line: %s\n", line);
-    fgets(line, MAXPATHSIZE, f);
-    printf("Line: %s\n", line);
-    strcpy(conf->rootPath, line);
-    printf("conf->rootPath: %s\n", conf->rootPath);
+    fgets(line, MAXLINESIZE, f);
+    fgets(line, MAXLINESIZE, f);
+    port = atoi(line);
+    if(port < 1024 || port > 65535){
+        fprintf(stderr, "Port provided is invalid\n");
+        exit(1);
+    }
+    /* ROOT DIRECTORY */
+    fgets(line, MAXLINESIZE, f);
+    fgets(line, MAXLINESIZE, f);
+    strcpy(rootPath, line);
+    char* token = strtok(rootPath, "\t\n ");
+    printf("token %s\n", token);
+    printf("compare: %d\n", strcmp(token, "/tmp/local"));
+    int res = access("/tmp", F_OK);
+    printf("res %d\n", res);
+    if(res != 0){
+        /* Directory does not exist. */
+        printf("token %s\n", rootPath);
+        fprintf(stderr, "Root path does not exist\n");
+        exit(1);
+    }
     /* COMMANDS */
-    fgets(line, MAXPATHSIZE, f);
-    // while ((read = getline(&line, &len, fp)) != -1) {
-    //     printf("Retrieved line of length %zu:\n", read);
-    //     printf("%s", line);
-    // }
+    fgets(line, MAXLINESIZE, f);
+    for(int i = 0; i < MAXCMDS; i++){
+        if(!fgets(line, MAXLINESIZE, f)) 
+            break;
+        strcpy(commands[i], line);
+    }
 
 
-    echoServPort = atoi(argv[1]);  /* First arg:  local port */
-
-    servSock = CreateTCPServerSocket(echoServPort);
+    servSock = CreateTCPServerSocket(port);
 
     /* Set ChildExitSignalHandler() as handler function */
     myAction.sa_handler =  ChildExitSignalHandler;
