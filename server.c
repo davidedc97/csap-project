@@ -45,29 +45,37 @@ int main(int argc, char *argv[])
     FILE* f = fopen(argv[1], "r");
 
     if(f == NULL){
-        fprintf(stderr, "Cannot open CONFIG_FILE provided\n", argv[0]);
+        fprintf(stderr, "Cannot open CONFIG_FILE provided\n");
         exit(1);
     }
 
-    char* line = NULL;
-    int len = 0;
+    char line[MAXPATHSIZE];
+    size_t len = 0;
     int bytes = 0;
-    CONFIG config;
+    CONFIG* conf = (CONFIG*)malloc(sizeof(CONFIG));
 
+    printf("arrivo qui\n");
     /* PORT */
-    read = getline(&line, &len, f);
-    read = getline(&line, &len, f);
-    config->port = atoi(line);
+    fgets(line, MAXPATHSIZE, f);
+    printf("Line: %s\n", line);
+    fgets(line, MAXPATHSIZE, f);
+    printf("Line: %s\n", line);
+    printf("Cast: %d\n", atoi(line));
+    conf->port = atoi(line);
+    printf("conf->port: %d\n", conf->port);
     /* ROOT */
-    read = getline(&line, &len, f);
-    read = getline(&line, &len, f);
-    strcpy(config->rootPath, line);
+    fgets(line, MAXPATHSIZE, f);
+    printf("Line: %s\n", line);
+    fgets(line, MAXPATHSIZE, f);
+    printf("Line: %s\n", line);
+    strcpy(conf->rootPath, line);
+    printf("conf->rootPath: %s\n", conf->rootPath);
     /* COMMANDS */
-    read = getline(&line, &len, f);
-    while ((read = getline(&line, &len, fp)) != -1) {
-        printf("Retrieved line of length %zu:\n", read);
-        printf("%s", line);
-    }
+    fgets(line, MAXPATHSIZE, f);
+    // while ((read = getline(&line, &len, fp)) != -1) {
+    //     printf("Retrieved line of length %zu:\n", read);
+    //     printf("%s", line);
+    // }
 
 
     echoServPort = atoi(argv[1]);  /* First arg:  local port */
