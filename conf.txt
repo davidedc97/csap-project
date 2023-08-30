@@ -1,8 +1,9 @@
-#Port
+# Port
 8000
-#Root
-/tmp
-#Cmds
-sort
+# Root
+/tmp/local
+# Commands
+echo
 cat
 sh256sum
+sort
