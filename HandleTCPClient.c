@@ -9,34 +9,37 @@
 #define BUFFSIZE 1024     /* Size of receive buffer */
 #define MAXCMDSIZE 1024   /* Max size of command received */
 #define MAXARGS 100       /* Max number of arguments for a command */
+#define MAXUSRSIZE 1024     /* Max size for username and password */
 
-void DieWithError(char *errorMessage);  /* Error handling function */
 
-void DisplayWelcome(int clntSocket, char* cwd) {
-    char welcomeMessage[BUFFSIZE * 2] = "Connected. Current path is\n"; /* Must be able to contain a path of size BUFFSIZE */
-    strcat(welcomeMessage, cwd);
-    printf("welcome message: %s\n", welcomeMessage);
-    if (send(clntSocket, welcomeMessage, strlen(welcomeMessage), 0) != strlen(welcomeMessage))
-        DieWithError("send() failed");
-}
+void DieWithError(char *errorMessage);                      /* Error handling function */
+void DisplayWelcome(int clntSocket, char* cwd);             /* Display a welcome message */
+int Login(int clntSocket, char* username, char* password);  /* Check credentials */
+
+
 
 void HandleTCPClient(int clntSocket)
 {
     char buffer[BUFFSIZE];        /* Buffer for received message */
     int recvSize;                 /* Size of received message */
     char cmd[MAXCMDSIZE];         /* Buffer for whole command */
+    char cmdOrig[MAXCMDSIZE];     /* Backup not meant to be modified by tokenizer */
     int cmdSize;                  /* Size of whole command */     
     char output[BUFFSIZE];        /* Buffer for output of cmd */
     char cwd[BUFFSIZE];           /* Buffer for storing the current working directory */
+    char username[MAXUSRSIZE];    /* Username of the client */
+    char password[MAXUSRSIZE];    /* Password of the client */
     FILE *fp;                     /* Pointer for popen fd */
 
 
-    memset(cmd, 0, MAXCMDSIZE);   /* zero-ing cmd memory */
-    memset(cmd, 0, MAXCMDSIZE);   /* zero-ing cmd memory */
+    memset(buffer, 0, BUFFSIZE);   /* zero-ing buffer memory */
+    memset(cmd, 0, MAXCMDSIZE);    /* zero-ing cmd memory */
+    memset(cwd, 0, BUFFSIZE);      /* zero-ing cwd memory */
 
     if (getcwd(cwd, sizeof(cwd)) == NULL)
         DieWithError("getcwd() failed");
     
+    Login(clntSocket, username, password);
     DisplayWelcome(clntSocket, cwd);
 
     while(1){
@@ -47,7 +50,8 @@ void HandleTCPClient(int clntSocket)
             DieWithError("recv() failed");
 
         buffer[recvSize] = '\0';
-        strcat(cmd,  buffer);
+        strcat(cmd, buffer);
+        strcpy(cmdOrig, cmd);
 
         printf("Received: %s\n", cmd);
         cmdSize = strlen(cmd);
@@ -526,6 +530,90 @@ void HandleTCPClient(int clntSocket)
             }
 
         }
+        else if(strcmp(cmd, "run") == 0) {
+            int pipefd[2];
+            char* argv[MAXARGS];
+            memset(argv, 0, MAXARGS);
+            argv[0] = "/bin/bash";
+            argv[1] = "-c"
+            int i = 1;
+
+            /* Check if args are between " " */
+            char* pch;
+            if((pch = strchr(cmdOrig, '"')) != NULL){
+
+            }
+            else if(pch = strchr(cmdOrig, '>')) != NULL){
+
+            }
+            
+            /* Get command args */
+            while ((token = strtok(NULL, s)) != NULL) {
+                if(i >= MAXARGS) 
+                    break;
+                argv[i++] = token;
+            }
+            /* Last element in argv should be NULL from documentation */
+            if(i >= MAXARGS)
+                argv[MAXARGS] = NULL;
+            else
+                argv[i] = NULL;
+            
+            for(int k=0; k<MAXARGS; k++){
+                printf("Elem %d: %s\n", k, argv[k]);
+                if(argv[k] == NULL)
+                    break;
+            }
+
+            /* pipe() to read the output of the command */
+            if (pipe(pipefd) == -1)
+                DieWithError("pipe() failed");
+
+            /* Fork() + exec() to execute the command */
+            pid_t pid = fork();
+
+            if (pid == -1)
+                DieWithError("fork() failed");
+            else if (pid > 0) {
+                /* Inside parent */
+                close(pipefd[1]);
+                int nbytes = 0;
+                memset(output, 0, BUFFSIZE);
+                memset(buffer, 0, BUFFSIZE);
+                output[0] = '\0';
+                buffer[0] = '\0';
+
+                while((nbytes = read(pipefd[0], buffer, sizeof(buffer))) != 0) {
+                    strcat(output, buffer);
+                    memset(buffer, 0, BUFFSIZE);
+                }
+
+                printf("Output: %s\n", output);
+                int status;
+                waitpid(pid, &status, 0);
+                printf("Exit status: %d\n", status);
+
+                /* Upon successful completion, mkdir shall return 0 */
+                if(status != 0) {
+                    if (send(clntSocket, output, strlen(output), 0) != strlen(output))
+                        DieWithError("send() failed");
+                }
+                else {
+                    const char* msg = "create_dir successful";
+                    if (send(clntSocket, msg, strlen(msg), 0) != strlen(msg))
+                        DieWithError("send() failed");
+                }
+            }
+            else {
+                /* Inside child */
+                dup2 (pipefd[1], STDOUT_FILENO);
+                dup2 (pipefd[1], STDERR_FILENO);
+                close(pipefd[0]);
+                close(pipefd[1]);
+                if (execve(argv[0], argv, NULL) == -1)  /* execve returns only in case of error */
+                    DieWithError("Could not execve()");
+            }
+        }
         else if(strcmp(cmd, "exit") == 0) {
             printf("Closing connection with %d\n", getpid());
             break;
@@ -541,3 +629,99 @@ void HandleTCPClient(int clntSocket)
 
     close(clntSocket);    /* Close client socket */
 }
+
+
+int Login(int clntSocket, char* username, char* password) {
+    int recvBytes = 0;
+    char buffer[BUFFSIZE];
+    char command[MAXCMDSIZE];
+    char output[BUFFSIZE]; 
+
+    if ((recvBytes = recv(clntSocket, buffer, BUFFSIZE, 0)) < 0)
+        DieWithError("recv() failed");
+    
+    char* token = strtok(buffer, "\n");
+    strcpy(username, token);
+    token = strtok(NULL, "\n");
+    strcpy(password, token);
+
+    printf("User: %s\n", username);
+    printf("Password: %s\n", password);
+
+    sprintf(command, "echo %s | su %s", password, username);
+    // FILE* pipe = popen(command, "r");
+
+    // int res = pclose(pipe);
+    // printf("res of pclose: %d\n", res);
+    // if (send(clntSocket, &res, sizeof(res), 0) != sizeof(res))
+    //     DieWithError("send() failed");
+
+
+
+    int pipefd[2];
+    char* argv[MAXARGS];
+    argv[0] = "/bin/bash";
+    argv[1] = "-c";
+    argv[2] = command;
+    argv[3] = NULL;
+
+    /* pipe() to read the output of the command */
+    if (pipe(pipefd) == -1)
+        DieWithError("pipe() failed");
+
+    /* Fork() + exec() to execute the command */
+    pid_t pid = fork();
+
+    if (pid == -1)
+        DieWithError("fork() failed");
+    else if (pid > 0) {
+        /* Inside parent */
+        close(pipefd[1]);
+        int nbytes = 0;
+        memset(output, 0, BUFFSIZE);
+        memset(buffer, 0, BUFFSIZE);
+        output[0] = '\0';
+        buffer[0] = '\0';
+
+        while((nbytes = read(pipefd[0], buffer, sizeof(buffer))) != 0) {
+            strcat(output, buffer);
+            memset(buffer, 0, BUFFSIZE);
+        }
+
+        printf("Output: %s\n", output);
+        int status;
+        waitpid(pid, &status, 0);
+        printf("Exit status: %d\n", status);
+
+        /* Upon successful completion, su shall return 0*/
+        // if(status != 0) {
+        //     if (send(clntSocket, output, strlen(output), 0) != strlen(output))
+        //         DieWithError("send() failed");
+        // }
+        // else {
+        //     const char* msg = "delete_dir successful";
+        //     if (send(clntSocket, msg, strlen(msg), 0) != strlen(msg))
+        //         DieWithError("send() failed");
+        // }
+    }
+    else {
+        /* Inside child */
+        dup2 (pipefd[1], STDOUT_FILENO);
+        dup2 (pipefd[1], STDERR_FILENO);
+        close(pipefd[0]);
+        close(pipefd[1]);
+        if (execve(argv[0], argv, NULL) == -1)  /* execve returns only in case of error */
+            DieWithError("Could not execve()");
+    }
+}
+
+void DisplayWelcome(int clntSocket, char* cwd) {
+    char welcomeMessage[BUFFSIZE * 2] = "Connected. Current path is\n"; /* Must be able to contain a path of size BUFFSIZE */
+    strcat(welcomeMessage, cwd);
+    printf("welcome message: %s\n", welcomeMessage);
+    if (send(clntSocket, welcomeMessage, strlen(welcomeMessage), 0) != strlen(welcomeMessage))
+        DieWithError("send() failed");
+}
+
+
+

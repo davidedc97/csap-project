@@ -14,11 +14,11 @@
 #define MAXLINESIZE 512 /* Maximum size of line in conf */
 #define MAXCMDS 64      /* Maximum number of additional commands */
 
-void DieWithError(char *errorMessage);  /* Error handling function */
-void HandleTCPClient(int clntSocket);   /* TCP client handling function */
-void ChildExitSignalHandler();     /* Function to clean up zombie child processes */
-int CreateTCPServerSocket(unsigned short port); /* Create TCP server socket */
-int AcceptTCPConnection(int servSock);  /* Accept TCP connection request */
+void DieWithError(char *errorMessage);                   /* Error handling function */
+void HandleTCPClient(int clntSocket);                    /* TCP client handling function */
+void ChildExitSignalHandler();                           /* Function to clean up zombie child processes */
+int CreateTCPServerSocket(unsigned short port);          /* Create TCP server socket */
+int AcceptTCPConnection(int servSock, char** commands);  /* Accept TCP connection request */
 
 
 
@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
     char line[MAXLINESIZE];              /* Buffer for reading config file */
     char rootPath[MAXPATHSIZE];          /* Root path */
     char commands[MAXCMDS][MAXLINESIZE]; /* List of additional commands */
+
  
     if (argc != 2)     /* Test for correct number of arguments */
     {
@@ -63,12 +64,8 @@ int main(int argc, char *argv[])
     fgets(line, MAXLINESIZE, f);
     fgets(line, MAXLINESIZE, f);
     strcpy(rootPath, line);
-    char* token = strtok(rootPath, "\t\n ");
-    printf("token %s\n", token);
-    printf("compare: %d\n", strcmp(token, "/tmp/local"));
-    int res = access("/tmp", F_OK);
-    printf("res %d\n", res);
-    if(res != 0){
+    rootPath[strcspn(rootPath, "\r\n")] = '\0';   // remove trailing special chars
+    if(access(rootPath, F_OK) != 0){
         /* Directory does not exist. */
         printf("token %s\n", rootPath);
         fprintf(stderr, "Root path does not exist\n");
@@ -80,10 +77,12 @@ int main(int argc, char *argv[])
         if(!fgets(line, MAXLINESIZE, f)) 
             break;
         strcpy(commands[i], line);
+        commands[i][strcspn(commands[i], "\r\n")] = '\0';   // remove trailing special chars
     }
 
 
     servSock = CreateTCPServerSocket(port);
+    printf("Listening on port %d\n", port);
 
     /* Set ChildExitSignalHandler() as handler function */
     myAction.sa_handler =  ChildExitSignalHandler;
@@ -106,11 +105,11 @@ int main(int argc, char *argv[])
         else if (processID == 0)  /* If this is the child process */
         {
             close(servSock);   /* Child closes parent socket file descriptor */
-            HandleTCPClient(clntSock);
+            HandleTCPClient(clntSock, commands);
             exit(0);              /* Child process done */
         }
 
-	    printf("with child process: %d\n", (int) processID);
+	    printf("Child process: %d\n", (int) processID);
         close(clntSock);       /* Parent closes child socket descriptor */
         childProcCount++;      /* Increment number of outstanding child processes */
     }
