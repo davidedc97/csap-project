@@ -535,15 +535,33 @@ void HandleTCPClient(int clntSocket)
             char* argv[MAXARGS];
             memset(argv, 0, MAXARGS);
             argv[0] = "/bin/bash";
-            argv[1] = "-c"
+            argv[1] = "-c";
             int i = 1;
 
             /* Check if args are between " " */
             char* pch;
             if((pch = strchr(cmdOrig, '"')) != NULL){
-
+                char* pch2;
+                char* pch3 = strchr(pch+1, '"'); // get pointer to second "
+                if(pch3 == NULL){
+                    // BAD SYNTAX
+                    printf("Bad syntax\n");
+                }
+                token = strtok(NULL, "\"");
+                argv[2] = token;
+                // /* Check if the command has a pipe INSIDE " "*/
+                // if((pch2 = strchr(cmdOrig, '|')) != NULL){
+                //     char * pch3 = strchr(pch+1, '"');
+                // }
+                // /* Check if there's a redirection INSIDE " " */
+                // if((pch2 = strchr(cmdOrig, '>')) != NULL){
+                //     /* Check if the redirection is before last " */
+                //     int index = (int)pch2 - pch3;
+                //     if()
+                    
+                // }
             }
-            else if(pch = strchr(cmdOrig, '>')) != NULL){
+            else if((pch = strchr(cmdOrig, '>')) != NULL){
 
             }
             
