@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-g 
 LDFLAGS=-g 
 
-EXE=client server
+EXE=client server cleanObjs
 
 all: $(EXE)
 
