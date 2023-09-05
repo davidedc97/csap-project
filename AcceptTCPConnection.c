@@ -7,20 +7,20 @@ void DieWithError(char *errorMessage);  /* Error handling function */
 int AcceptTCPConnection(int servSock)
 {
     int clntSock;                    /* Socket descriptor for client */
-    struct sockaddr_in echoClntAddr; /* Client address */
+    struct sockaddr_in clntAddr; /* Client address */
     unsigned int clntLen;            /* Length of client address data structure */
 
     /* Set the size of the in-out parameter */
-    clntLen = sizeof(echoClntAddr);
+    clntLen = sizeof(clntAddr);
     
     /* Wait for a client to connect */
-    if ((clntSock = accept(servSock, (struct sockaddr *) &echoClntAddr, 
+    if ((clntSock = accept(servSock, (struct sockaddr *) &clntAddr, 
            &clntLen)) < 0)
         DieWithError("accept() failed");
     
     /* clntSock is connected to a client! */
     
-    printf("Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
+    printf("Handling client %s\n", inet_ntoa(clntAddr.sin_addr));
 
     return clntSock;
 }

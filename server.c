@@ -29,10 +29,9 @@ int main(int argc, char *argv[])
 {
     int servSock;                        /* Socket descriptor for server */
     int clntSock;                        /* Socket descriptor for client */
-    unsigned short echoServPort;         /* Server port */
+    int port;                            /* Listening port */
     pid_t processID;                     /* Process ID from fork() */
     struct sigaction myAction;           /* Signal handler specification structure */
-    int port;                            /* Listening port */
     char line[MAXLINESIZE];              /* Buffer for reading config file */
     char rootPath[MAXPATHSIZE];          /* Root path */
     char* commands[MAXCMDS]; /* List of additional commands */
@@ -82,7 +81,11 @@ int main(int argc, char *argv[])
         commands[i][strcspn(commands[i], "\r\n")] = '\0';   // remove trailing special chars
         nCmds++;
     }
-
+    
+    /* Set root directory */
+    if (chroot(rootPath) != 0){
+        DieWithError("chroot() failed");
+    }
 
     servSock = CreateTCPServerSocket(port);
     printf("Listening on port %d\n", port);

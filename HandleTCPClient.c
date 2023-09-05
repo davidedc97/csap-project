@@ -4,9 +4,12 @@
 #include <string.h>     /* for strcat() */
 #include <stdlib.h>     /* for popen() */
 #include <sys/wait.h>   /* for waitpid() */
-#include <ctype.h>
+#include <ctype.h>      /* for isspace() */
 #include <sys/types.h>
-#include <pwd.h>
+#include <pwd.h>        /* for passwd struct */
+#include <semaphore.h>  /* for semaphores */
+#include <pthread.h>    /* for semaphores */
+#include <fcntl.h>      /* for sem_open() constants */
 
 
 #define BUFFSIZE 1024     /* Size of receive buffer */
@@ -17,7 +20,7 @@
 
 
 void DieWithError(char *errorMessage);                      /* Error handling function */
-void DisplayWelcomeMessage(int clntSocket, char* cwd);      /* Display a welcome message */
+void DisplayWelcomeMessage(int clntSocket, char* cwd);      /* Displays a welcome message */
 int Login(int clntSocket, char* username, char* password);  /* Check credentials */
 char* strstrip(char *s);                                    /* Strip spaces of a string */
 void getUidGid(char* username, int* uid, int* gid);         /* Extract uid and gid from username */
@@ -41,17 +44,31 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
     memset(buffer, 0, BUFFSIZE);  /* zero-ing buffer memory */
     memset(cmd, 0, MAXCMDSIZE);   /* zero-ing cmd memory */
     memset(cwd, 0, BUFFSIZE);     /* zero-ing cwd memory */
+    
+    /* Initialize semaphore for lock on resources */
+    const char* semName = "resource_sem";
+    // sem_t* sem_id = sem_open(semName, O_CREAT, 0600, 1);
+    // if (sem_id == SEM_FAILED)
+    //     DieWithError("sem_open() failed\n");
+    sem_t mutex;
+    sem_init(&mutex, 0, 1);
+
+
 
     if (getcwd(cwd, sizeof(cwd)) == NULL)
         DieWithError("getcwd() failed");
     
     /* Check credentials */
-    int logged = Login(clntSocket, username, password);
-    char* msgLogin = (char*)malloc(32); // it's just a return code
-    sprintf(msgLogin, "%d", logged);
-    if (send(clntSocket, msgLogin, strlen(msgLogin), 0) != strlen(msgLogin))
-        DieWithError("send() failed");
-    free(msgLogin);
+    int logged = 0;
+    // logged = Login(clntSocket, username, password);
+    
+    // char* msgLogin = (char*)malloc(32); // it's just a return code
+    // sprintf(msgLogin, "%d", logged);
+
+    // if (send(clntSocket, msgLogin, strlen(msgLogin), 0) != strlen(msgLogin))
+    //     DieWithError("send() failed");
+    // free(msgLogin);
+    
     if (logged != 0){
         printf("Bad credentials\n");
         close(clntSocket);
@@ -61,11 +78,18 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
         DisplayWelcomeMessage(clntSocket, cwd);
     }
 
-    /* Get credentials */
+    /* Get credentials and set permissions of logged user */
     int uid, gid;
-    getUidGid(username, &uid, &gid);
+    // getUidGid(username, &uid, &gid);
+    getUidGid("cc20-sapienza", &uid, &gid);
+    if (setuid(uid) == -1)
+        DieWithError("setuid() failed");
+    if (setgid(gid) == -1)
+        DieWithError("setgid() failed");
 
-    while(1){
+    int closeConnection = 0;
+    /* Start listening for commands */
+    while(!closeConnection){
         cmd[0] = '\0';
         
         /* Receive message from client */
@@ -88,6 +112,11 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
 
         printf("Token: %s\n", token);
 
+
+        /* Acquire lock before any operation */
+        if (sem_wait(&mutex) < 0)
+            DieWithError("sem_wait() failed\n");
+        
         /* "Switch case" on command */
 
         if(strcmp(cmd, "copy") == 0) {
@@ -607,6 +636,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
                                     DieWithError("send() failed");
                                 free(outputMsg);
                             }
+                            free(tokenizedCmds[tmp]);
                         }
                             
                     }
@@ -633,6 +663,8 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
                     }
                     
                     argv[2] = insideCmd;
+                    free(tmpCmd);
+
                 }
                 else{
                     // BAD SYNTAX
@@ -675,6 +707,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
                     else {
                         argv[2] = insideCmd;
                     }
+                    free(tmpCmd);
 
                 }
                 else {
@@ -718,8 +751,12 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
                     break;
             }
 
-            if(commandNotAllowed || badSyntax) 
+            /* If any error occurred, continue and wait for next instruction without executing */
+            if(commandNotAllowed || badSyntax){
+                if (sem_post(&mutex) < 0)
+                    DieWithError("sem_post() failed \n");
                 continue;
+            }
             
 
             /* pipe() to read the output of the command */
@@ -750,6 +787,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
                 waitpid(pid, &status, 0);
                 printf("Exit status: %d\n", status);
 
+                free(argv[2]);
                 /* Upon successful completion, bash shall return 0 */
                 if(status != 0) {
                     if (send(clntSocket, output, strlen(output), 0) != strlen(output))
@@ -760,6 +798,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
                     sprintf(msg, "Successful\n%s", output);
                     if (send(clntSocket, msg, strlen(msg), 0) != strlen(msg))
                         DieWithError("send() failed");
+                    free(msg);
                 }
             }
             else {
@@ -773,19 +812,23 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
             }
         }
         else if(strcmp(cmd, "exit") == 0) {
-            printf("Closing connection with %d\n", getpid());
-            break;
+            closeConnection = 1;
         }
         else{
             const char* msg = "Invalid command";
             if (send(clntSocket, msg, strlen(msg), 0) != strlen(msg))
                 DieWithError("send() failed");
         }
+        if (sem_post(&mutex) < 0)
+            DieWithError("sem_post() failed \n");
 
 
     }
 
+    printf("Closing connection with %d\n", getpid());
     close(clntSocket);    /* Close client socket */
+    if (sem_close(&mutex) != 0)
+        DieWithError("sem_close() failed\n");
 }
 
 
