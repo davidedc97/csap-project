@@ -4,21 +4,24 @@
 #include <string.h>     /* for strcat() */
 #include <stdlib.h>     /* for popen() */
 #include <sys/wait.h>   /* for waitpid() */
+#include <ctype.h>
 
 
 #define BUFFSIZE 1024     /* Size of receive buffer */
 #define MAXCMDSIZE 1024   /* Max size of command received */
 #define MAXARGS 100       /* Max number of arguments for a command */
-#define MAXUSRSIZE 1024     /* Max size for username and password */
+#define MAXUSRSIZE 1024   /* Max size for username and password */
+#define MAXCMDS 64        /* Maximum number of additional commands */
 
 
 void DieWithError(char *errorMessage);                      /* Error handling function */
 void DisplayWelcome(int clntSocket, char* cwd);             /* Display a welcome message */
 int Login(int clntSocket, char* username, char* password);  /* Check credentials */
+char* strstrip(char *s);
 
 
 
-void HandleTCPClient(int clntSocket)
+void HandleTCPClient(int clntSocket, char** commands)
 {
     char buffer[BUFFSIZE];        /* Buffer for received message */
     int recvSize;                 /* Size of received message */
@@ -39,7 +42,7 @@ void HandleTCPClient(int clntSocket)
     if (getcwd(cwd, sizeof(cwd)) == NULL)
         DieWithError("getcwd() failed");
     
-    Login(clntSocket, username, password);
+    // Login(clntSocket, username, password);
     DisplayWelcome(clntSocket, cwd);
 
     while(1){
@@ -541,47 +544,148 @@ void HandleTCPClient(int clntSocket)
             /* Check if args are between " " */
             char* pch;
             if((pch = strchr(cmdOrig, '"')) != NULL){
-                char* pch2;
-                char* pch3 = strchr(pch+1, '"'); // get pointer to second "
-                if(pch3 == NULL){
+                char* pch2 = strchr(pch+1, '"'); // get pointer to second "
+                if(pch2 != NULL){
+                    /* Check if every command is in the allowed commands */
+                    token = strtok(NULL, "\"");
+                    char insideCmd[MAXCMDSIZE];
+                    char tmpCmd[MAXCMDSIZE];
+                    char* tokenizedCmds[MAXCMDS];
+                    int badSyntax = 0;
+                    strcpy(insideCmd, token);
+                    strcpy(tmpCmd, token);
+                    printf("insideCmd: %s\n", insideCmd);
+
+                    /* If there's a | , check only the first token of each command to see if it's allowed */
+                    if(strchr(tmpCmd, '|') != NULL){
+                        printf("entro qui\n");
+                        int cmdCounter = 0;
+                        /* grazie al cazzo, devo fare un do while qua sotto per il token, non passo mai NULL */
+                        while((token = strtok(tmpCmd, "|")) != NULL){
+                            printf("almeno uno lo faccio\n");
+                            tokenizedCmds[cmdCounter++] = token;
+                        }
+                        for(int tmp=0; tmp < cmdCounter; tmp++){
+                            printf("commands in pipe: <%s>\n", tokenizedCmds[cmdCounter]);
+                        }
+
+                        char* firstPipe = strchr(tmpCmd, '|');
+                        /* Only one pipe allowed */
+                        char* cmdPipe = strtok(tmpCmd, "|");
+                        char* cmd2 = strtok(NULL, "|");
+                        // printf("found cmdPipe %s\n", cmdPipe);
+
+                        do {
+                            printf("found cmdPipe <%s>\n", cmdPipe);
+                            // char* tknPipe = strstrip(strtok(NULL, " "));
+                            char* tknPipe = strtok(NULL, " ");
+                            printf("tknPipe: <%s>\n", tknPipe);
+                            // char* trimmed = strstrip(tknPipe);
+                            // printf("Trimmed: <%s>\n", trimmed);
+                            int foundCmd = 0;
+                            if(tknPipe != NULL){
+                                printf("qua dentro");
+                                for(int mc = 0; mc < MAXCMDS; mc++){
+                                    printf("Comparing %s to %s\n", tknPipe, commands[mc]);
+                                    if(strcmp(commands[mc], tknPipe) == 0){
+                                        foundCmd = 1;
+                                        break;
+                                    }
+                                }
+                            }
+                            else {
+                                badSyntax = 1;
+                            }
+                            if(!foundCmd)
+                                badSyntax = 1;
+                        } while ((cmdPipe = strtok(NULL, "|")) != NULL && !badSyntax);
+                       printf("fuori\n");
+                        
+                        
+                        // // Checking first token of the command 1
+                        // char* tkn1 = strtok(cmd1, s);
+                        // int foundCmd1 = 0;
+                        // if(tkn1 != NULL){
+                        //     for(int mc = 0; mc < MAXCMDS; mc++){
+                        //         printf("Comparing %s to %s\n", tkn1, commands[mc]);
+                        //         if(strcmp(commands[mc], tkn1) == 0){
+                        //             foundCmd1 = 1;
+                        //             break;
+                        //         }
+                        //     }
+                        // }
+                        // else {
+                        //     badSyntax = 1;
+                        // }
+                        
+                        // // Checking first token of the command 2
+                        // char* tkn2 = strtok(cmd2, s);
+                        // int foundCmd2 = 0;
+                        // if(tkn2 != NULL){
+                        //     for(int mc = 0; mc < MAXCMDS; mc++){
+                        //         printf("Comparing %s to %s\n", tkn2, commands[mc]);
+                        //         if(strcmp(commands[mc], tkn2) == 0){
+                        //             foundCmd2 = 1;
+                        //             break;
+                        //         }
+                        //     }
+                        // }
+                        // else {
+                        //     badSyntax = 1;
+                        // }
+                        
+                        
+                        // if(!foundCmd1 || !foundCmd2)
+                        //     badSyntax = 1;
+                            
+                    }
+                    // while (token != NULL) {
+                    //     printf("TOKEN: %s\n", token);
+                    //     if(strcmp(token, "|") == 0)
+                    //         continue;
+                    //     if(strcmp(token, ">") == 0)
+                    //         break;
+                    //     int found = 0;
+                    //     printf("arrivo qua\n");
+                    //     for(int mc = 0; mc < MAXCMDS; mc++){
+                    //         printf("Comparing %s to %s\n", token, commands[mc]);
+                    //         if(strcmp(commands[mc], token) == 0){
+                    //             found = 1;
+                    //             break;
+                    //         }
+                    //     }
+                    //     if(!found){
+                    //         /* Command not allowed */
+                    //         printf("Command not allowed\n");
+                    //         break;
+                    //     }
+                    //     token = strtok(NULL, s);
+                    // }
+                    argv[2] = tmpCmd;
+                }
+                else{
                     // BAD SYNTAX
                     printf("Bad syntax\n");
                 }
-                token = strtok(NULL, "\"");
-                argv[2] = token;
-                // /* Check if the command has a pipe INSIDE " "*/
-                // if((pch2 = strchr(cmdOrig, '|')) != NULL){
-                //     char * pch3 = strchr(pch+1, '"');
-                // }
-                // /* Check if there's a redirection INSIDE " " */
-                // if((pch2 = strchr(cmdOrig, '>')) != NULL){
-                //     /* Check if the redirection is before last " */
-                //     int index = (int)pch2 - pch3;
-                //     if()
-                    
-                // }
+                
             }
-            else if((pch = strchr(cmdOrig, '>')) != NULL){
-
+            /* If no " " are present we take only the first argument as cmd */
+            /* If there is a redirection, it is on client-side */
+            else {
+                token = strtok(NULL, s);
+                argv[2] = token;
             }
             
-            /* Get command args */
-            while ((token = strtok(NULL, s)) != NULL) {
-                if(i >= MAXARGS) 
-                    break;
-                argv[i++] = token;
-            }
+            
             /* Last element in argv should be NULL from documentation */
-            if(i >= MAXARGS)
-                argv[MAXARGS] = NULL;
-            else
-                argv[i] = NULL;
+            argv[3] = NULL;
             
             for(int k=0; k<MAXARGS; k++){
                 printf("Elem %d: %s\n", k, argv[k]);
                 if(argv[k] == NULL)
                     break;
             }
+            continue;
 
             /* pipe() to read the output of the command */
             if (pipe(pipefd) == -1)
@@ -741,5 +845,23 @@ void DisplayWelcome(int clntSocket, char* cwd) {
         DieWithError("send() failed");
 }
 
+char* strstrip(char *s) {
+        size_t size;
+        char *end;
+
+        size = strlen(s);
+
+        if (!size)
+                return s;
+
+        end = s + size - 1;
+        while (end >= s && isspace(*end))
+                end--;
+        *(end + 1) = '\0';
+
+        while (*s && isspace(*s))
+                s++;
+        return s;
+}
 
 

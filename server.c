@@ -15,10 +15,10 @@
 #define MAXCMDS 64      /* Maximum number of additional commands */
 
 void DieWithError(char *errorMessage);                   /* Error handling function */
-void HandleTCPClient(int clntSocket);                    /* TCP client handling function */
+void HandleTCPClient(int clntSocket, char** commands);                    /* TCP client handling function */
 void ChildExitSignalHandler();                           /* Function to clean up zombie child processes */
 int CreateTCPServerSocket(unsigned short port);          /* Create TCP server socket */
-int AcceptTCPConnection(int servSock, char** commands);  /* Accept TCP connection request */
+int AcceptTCPConnection(int servSock);  /* Accept TCP connection request */
 
 
 

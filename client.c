@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     if (connect(sock, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0)
         DieWithError("connect() failed");
 
-    int res = Login(sock, username, password);
+    // int res = Login(sock, username, password);
 
 
     totalBytesRcvd = 0;
