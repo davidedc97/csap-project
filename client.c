@@ -13,6 +13,7 @@
 
 void DieWithError(char *errorMessage);                  /* Error handling function */
 int Login(int socket, char* username, char* password);  /* Get user and pw to send to server */
+void GetWelcomeMessage(int socket);
 
 int main(int argc, char *argv[])
 {
@@ -55,19 +56,25 @@ int main(int argc, char *argv[])
     if (connect(sock, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0)
         DieWithError("connect() failed");
 
-    // int res = Login(sock, username, password);
+    int logged = Login(sock, username, password);
+    if (logged != 0){
+        printf("Bad credentials\n");
+        close(sock);
+        exit(1);
+    }
 
-
-    totalBytesRcvd = 0;
-    bytesRcvd = 0;
-    printf("Received: ");
+    // sleep(1);
+    // totalBytesRcvd = 0;
+    // bytesRcvd = 0;
+    // printf("Received: ");
     
-    do {
-        buffer[bytesRcvd] = '\0';
-        printf("%s\n", buffer);
-    } while((bytesRcvd = recv(sock, buffer, BUFFSIZE-1, 0))>=BUFFSIZE-1);
-    buffer[bytesRcvd] = '\0';
-    printf("%s\n", buffer);
+    // do {
+    //     buffer[bytesRcvd] = '\0';
+    //     printf("%s\n", buffer);
+    // } while((bytesRcvd = recv(sock, buffer, BUFFSIZE-1, 0))>=BUFFSIZE-1);
+    // buffer[bytesRcvd] = '\0';
+    // printf("%s\n", buffer);
+    GetWelcomeMessage(sock);
 
     while(1){
         fgets(cmd, MAXCMDSIZE, stdin); /* Read command from stdin */
@@ -114,8 +121,6 @@ int Login(int socket, char* username, char* password) {
     strcpy(username, p->pw_name);
     printf("Password for user %s:\n", username);
     password = getpass("");
-    printf("User: %s\n", username);
-    printf("Password: %s\n", password);
     
     sprintf(buffer, "%s\n%s", username, password);
     if (send(socket, buffer, strlen(buffer), 0) != strlen(buffer))
@@ -124,8 +129,15 @@ int Login(int socket, char* username, char* password) {
     /* Get response */
     bytesRcvd = recv(socket, buffer, BUFFSIZE-1, 0);
     buffer[bytesRcvd] = '\0';
-    printf("Received from login: %s\n", buffer);
     int res = atoi(buffer);
-    printf("returning %d\n", res);
-    return 0;
+    return res;
+}
+void GetWelcomeMessage(int socket){
+    char buffer[BUFFSIZE];
+    int bytesRcvd = 0;
+
+    bytesRcvd = recv(socket, buffer, BUFFSIZE-1, 0);
+    buffer[bytesRcvd] = '\0';
+    printf(buffer);
+    printf("\n");
 }

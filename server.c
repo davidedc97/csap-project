@@ -15,7 +15,7 @@
 #define MAXCMDS 64      /* Maximum number of additional commands */
 
 void DieWithError(char *errorMessage);                   /* Error handling function */
-void HandleTCPClient(int clntSocket, char** commands);                    /* TCP client handling function */
+void HandleTCPClient(int clntSocket, char** commands, int nCmds);                    /* TCP client handling function */
 void ChildExitSignalHandler();                           /* Function to clean up zombie child processes */
 int CreateTCPServerSocket(unsigned short port);          /* Create TCP server socket */
 int AcceptTCPConnection(int servSock);  /* Accept TCP connection request */
@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
     int port;                            /* Listening port */
     char line[MAXLINESIZE];              /* Buffer for reading config file */
     char rootPath[MAXPATHSIZE];          /* Root path */
-    char commands[MAXCMDS][MAXLINESIZE]; /* List of additional commands */
+    char* commands[MAXCMDS]; /* List of additional commands */
 
  
     if (argc != 2)     /* Test for correct number of arguments */
@@ -73,11 +73,14 @@ int main(int argc, char *argv[])
     }
     /* COMMANDS */
     fgets(line, MAXLINESIZE, f);
+    int nCmds = 0;
     for(int i = 0; i < MAXCMDS; i++){
         if(!fgets(line, MAXLINESIZE, f)) 
             break;
+        commands[i] = (char*)malloc(MAXLINESIZE);
         strcpy(commands[i], line);
         commands[i][strcspn(commands[i], "\r\n")] = '\0';   // remove trailing special chars
+        nCmds++;
     }
 
 
@@ -105,7 +108,7 @@ int main(int argc, char *argv[])
         else if (processID == 0)  /* If this is the child process */
         {
             close(servSock);   /* Child closes parent socket file descriptor */
-            HandleTCPClient(clntSock, commands);
+            HandleTCPClient(clntSock, commands, nCmds);
             exit(0);              /* Child process done */
         }
 

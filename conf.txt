@@ -6,4 +6,4 @@
 echo
 cat
 sh256sum
-sort
+pwd

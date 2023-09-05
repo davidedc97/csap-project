@@ -5,6 +5,8 @@
 #include <stdlib.h>     /* for popen() */
 #include <sys/wait.h>   /* for waitpid() */
 #include <ctype.h>
+#include <sys/types.h>
+#include <pwd.h>
 
 
 #define BUFFSIZE 1024     /* Size of receive buffer */
@@ -15,13 +17,14 @@
 
 
 void DieWithError(char *errorMessage);                      /* Error handling function */
-void DisplayWelcome(int clntSocket, char* cwd);             /* Display a welcome message */
+void DisplayWelcomeMessage(int clntSocket, char* cwd);      /* Display a welcome message */
 int Login(int clntSocket, char* username, char* password);  /* Check credentials */
-char* strstrip(char *s);
+char* strstrip(char *s);                                    /* Strip spaces of a string */
+void getUidGid(char* username, int* uid, int* gid);         /* Extract uid and gid from username */
 
 
 
-void HandleTCPClient(int clntSocket, char** commands)
+void HandleTCPClient(int clntSocket, char** commands, int nCmds)
 {
     char buffer[BUFFSIZE];        /* Buffer for received message */
     int recvSize;                 /* Size of received message */
@@ -35,15 +38,32 @@ void HandleTCPClient(int clntSocket, char** commands)
     FILE *fp;                     /* Pointer for popen fd */
 
 
-    memset(buffer, 0, BUFFSIZE);   /* zero-ing buffer memory */
-    memset(cmd, 0, MAXCMDSIZE);    /* zero-ing cmd memory */
-    memset(cwd, 0, BUFFSIZE);      /* zero-ing cwd memory */
+    memset(buffer, 0, BUFFSIZE);  /* zero-ing buffer memory */
+    memset(cmd, 0, MAXCMDSIZE);   /* zero-ing cmd memory */
+    memset(cwd, 0, BUFFSIZE);     /* zero-ing cwd memory */
 
     if (getcwd(cwd, sizeof(cwd)) == NULL)
         DieWithError("getcwd() failed");
     
-    // Login(clntSocket, username, password);
-    DisplayWelcome(clntSocket, cwd);
+    /* Check credentials */
+    int logged = Login(clntSocket, username, password);
+    char* msgLogin = (char*)malloc(32); // it's just a return code
+    sprintf(msgLogin, "%d", logged);
+    if (send(clntSocket, msgLogin, strlen(msgLogin), 0) != strlen(msgLogin))
+        DieWithError("send() failed");
+    free(msgLogin);
+    if (logged != 0){
+        printf("Bad credentials\n");
+        close(clntSocket);
+        exit(1);
+    }
+    else {
+        DisplayWelcomeMessage(clntSocket, cwd);
+    }
+
+    /* Get credentials */
+    int uid, gid;
+    getUidGid(username, &uid, &gid);
 
     while(1){
         cmd[0] = '\0';
@@ -539,7 +559,8 @@ void HandleTCPClient(int clntSocket, char** commands)
             memset(argv, 0, MAXARGS);
             argv[0] = "/bin/bash";
             argv[1] = "-c";
-            int i = 1;
+            int badSyntax = 0;
+            int commandNotAllowed = 0;
 
             /* Check if args are between " " */
             char* pch;
@@ -548,132 +569,143 @@ void HandleTCPClient(int clntSocket, char** commands)
                 if(pch2 != NULL){
                     /* Check if every command is in the allowed commands */
                     token = strtok(NULL, "\"");
-                    char insideCmd[MAXCMDSIZE];
-                    char tmpCmd[MAXCMDSIZE];
+                    char* insideCmd = (char*)malloc(MAXCMDSIZE);
+                    char* tmpCmd = (char*)malloc(MAXCMDSIZE);  // copy to be tokenized
                     char* tokenizedCmds[MAXCMDS];
-                    int badSyntax = 0;
                     strcpy(insideCmd, token);
                     strcpy(tmpCmd, token);
                     printf("insideCmd: %s\n", insideCmd);
 
                     /* If there's a | , check only the first token of each command to see if it's allowed */
-                    if(strchr(tmpCmd, '|') != NULL){
-                        printf("entro qui\n");
+                    if(strchr(tmpCmd, '|') != NULL) {
+                        char* pipeToken;
                         int cmdCounter = 0;
-                        /* grazie al cazzo, devo fare un do while qua sotto per il token, non passo mai NULL */
-                        while((token = strtok(tmpCmd, "|")) != NULL){
-                            printf("almeno uno lo faccio\n");
-                            tokenizedCmds[cmdCounter++] = token;
+                        pipeToken = strtok(tmpCmd, "|");
+                        do{
+                            tokenizedCmds[cmdCounter] = (char*)malloc((MAXCMDSIZE));
+                            strcpy(tokenizedCmds[cmdCounter], pipeToken);
+                            tokenizedCmds[cmdCounter] = strstrip(tokenizedCmds[cmdCounter]);
+                            cmdCounter++;
                         }
-                        for(int tmp=0; tmp < cmdCounter; tmp++){
-                            printf("commands in pipe: <%s>\n", tokenizedCmds[cmdCounter]);
-                        }
-
-                        char* firstPipe = strchr(tmpCmd, '|');
-                        /* Only one pipe allowed */
-                        char* cmdPipe = strtok(tmpCmd, "|");
-                        char* cmd2 = strtok(NULL, "|");
-                        // printf("found cmdPipe %s\n", cmdPipe);
-
-                        do {
-                            printf("found cmdPipe <%s>\n", cmdPipe);
-                            // char* tknPipe = strstrip(strtok(NULL, " "));
-                            char* tknPipe = strtok(NULL, " ");
-                            printf("tknPipe: <%s>\n", tknPipe);
-                            // char* trimmed = strstrip(tknPipe);
-                            // printf("Trimmed: <%s>\n", trimmed);
-                            int foundCmd = 0;
-                            if(tknPipe != NULL){
-                                printf("qua dentro");
-                                for(int mc = 0; mc < MAXCMDS; mc++){
-                                    printf("Comparing %s to %s\n", tknPipe, commands[mc]);
-                                    if(strcmp(commands[mc], tknPipe) == 0){
-                                        foundCmd = 1;
-                                        break;
-                                    }
+                        while((pipeToken = strtok(NULL, "|")) != NULL);
+                        
+                        for(int tmp = 0; tmp < cmdCounter; tmp++){
+                            int found = 0;
+                            char* cmdToken = strtok(tokenizedCmds[tmp], s);
+                            for(int mc = 0; mc < nCmds; mc++){
+                                if(strcmp(commands[mc], cmdToken) == 0){
+                                    found = 1;
+                                    break;
                                 }
                             }
-                            else {
-                                badSyntax = 1;
+                            if(!found){
+                                /* Command not allowed */
+                                commandNotAllowed = 1;
+                                char* outputMsg = (char*)malloc(BUFFSIZE);
+                                sprintf(outputMsg, "<%s>: command not allowed\n", cmdToken);
+                                if (send(clntSocket, outputMsg, strlen(outputMsg), 0) != strlen(outputMsg))
+                                    DieWithError("send() failed");
+                                free(outputMsg);
                             }
-                            if(!foundCmd)
-                                badSyntax = 1;
-                        } while ((cmdPipe = strtok(NULL, "|")) != NULL && !badSyntax);
-                       printf("fuori\n");
-                        
-                        
-                        // // Checking first token of the command 1
-                        // char* tkn1 = strtok(cmd1, s);
-                        // int foundCmd1 = 0;
-                        // if(tkn1 != NULL){
-                        //     for(int mc = 0; mc < MAXCMDS; mc++){
-                        //         printf("Comparing %s to %s\n", tkn1, commands[mc]);
-                        //         if(strcmp(commands[mc], tkn1) == 0){
-                        //             foundCmd1 = 1;
-                        //             break;
-                        //         }
-                        //     }
-                        // }
-                        // else {
-                        //     badSyntax = 1;
-                        // }
-                        
-                        // // Checking first token of the command 2
-                        // char* tkn2 = strtok(cmd2, s);
-                        // int foundCmd2 = 0;
-                        // if(tkn2 != NULL){
-                        //     for(int mc = 0; mc < MAXCMDS; mc++){
-                        //         printf("Comparing %s to %s\n", tkn2, commands[mc]);
-                        //         if(strcmp(commands[mc], tkn2) == 0){
-                        //             foundCmd2 = 1;
-                        //             break;
-                        //         }
-                        //     }
-                        // }
-                        // else {
-                        //     badSyntax = 1;
-                        // }
-                        
-                        
-                        // if(!foundCmd1 || !foundCmd2)
-                        //     badSyntax = 1;
+                        }
                             
                     }
-                    // while (token != NULL) {
-                    //     printf("TOKEN: %s\n", token);
-                    //     if(strcmp(token, "|") == 0)
-                    //         continue;
-                    //     if(strcmp(token, ">") == 0)
-                    //         break;
-                    //     int found = 0;
-                    //     printf("arrivo qua\n");
-                    //     for(int mc = 0; mc < MAXCMDS; mc++){
-                    //         printf("Comparing %s to %s\n", token, commands[mc]);
-                    //         if(strcmp(commands[mc], token) == 0){
-                    //             found = 1;
-                    //             break;
-                    //         }
-                    //     }
-                    //     if(!found){
-                    //         /* Command not allowed */
-                    //         printf("Command not allowed\n");
-                    //         break;
-                    //     }
-                    //     token = strtok(NULL, s);
-                    // }
-                    argv[2] = tmpCmd;
+                    else {
+                        /* If there aren't any pipes, just check the first command */
+                        int found = 0;
+                        char* cmdToken = strtok(tmpCmd, s);
+                        for(int mc = 0; mc < nCmds; mc++){
+                            if(strcmp(commands[mc], cmdToken) == 0){
+                                found = 1;
+                                break;
+                            }
+                        }
+                        if(!found){
+                            /* Command not allowed */
+                            commandNotAllowed = 1;
+                            char* outputMsg = (char*)malloc(BUFFSIZE);
+                            sprintf(outputMsg, "<%s>: command not allowed\n", cmdToken);
+                            if (send(clntSocket, outputMsg, strlen(outputMsg), 0) != strlen(outputMsg))
+                                DieWithError("send() failed");
+                            free(outputMsg);
+                        }
+                        
+                    }
+                    
+                    argv[2] = insideCmd;
                 }
                 else{
                     // BAD SYNTAX
-                    printf("Bad syntax\n");
+                    badSyntax = 1;
+                    char* output = "Bad systax";
+                    if (send(clntSocket, output, strlen(output), 0) != strlen(output))
+                        DieWithError("send() failed");
                 }
                 
             }
             /* If no " " are present we take only the first argument as cmd */
             /* If there is a redirection, it is on client-side */
             else {
-                token = strtok(NULL, s);
-                argv[2] = token;
+                /* If there's a redirection, remove it from server command */
+                if(strchr(cmdOrig, '>') != NULL) {
+                    char* insideCmd = (char*)malloc(MAXCMDSIZE);
+                    char* tmpCmd = (char*)malloc(MAXCMDSIZE);  // temp command to tokenize
+                    char* cmdToken = strtok(NULL, ">");
+                    strcpy(insideCmd, cmdToken);
+                    strcpy(tmpCmd, cmdToken);
+                    
+                    // check only if first argumet is allowed
+                    int found = 0;
+                    cmdToken = strtok(tmpCmd, s);
+                    for(int mc = 0; mc < nCmds; mc++){
+                        if(strcmp(commands[mc], cmdToken) == 0){
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if(!found){
+                        /* Command not allowed */
+                        commandNotAllowed = 1;
+                        char* outputMsg = (char*)malloc(BUFFSIZE);
+                        sprintf(outputMsg, "<%s>: command not allowed\n", cmdToken);
+                        if (send(clntSocket, outputMsg, strlen(outputMsg), 0) != strlen(outputMsg))
+                            DieWithError("send() failed");
+                        free(outputMsg);
+                    }
+                    else {
+                        argv[2] = insideCmd;
+                    }
+
+                }
+                else {
+                    /* If no redirection is present, just take the first command and its arguments */
+                    int found = 0;
+                    char* insideCmd = (char*)malloc(MAXCMDSIZE);
+                    char* cmdToken = strtok(NULL, s);
+                    for(int mc = 0; mc < nCmds; mc++){
+                        if(strcmp(commands[mc], cmdToken) == 0){
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if(!found){
+                        /* Command not allowed */
+                        commandNotAllowed = 1;
+                        char* outputMsg = (char*)malloc(BUFFSIZE);
+                        sprintf(outputMsg, "<%s>: command not allowed\n", cmdToken);
+                        if (send(clntSocket, outputMsg, strlen(outputMsg), 0) != strlen(outputMsg))
+                            DieWithError("send() failed");
+                        free(outputMsg);
+                    }
+                    else {
+                        strcpy(insideCmd, cmdToken);
+                        while((cmdToken = strtok(NULL, s)) != NULL){
+                            strcat(insideCmd, " ");
+                            strcat(insideCmd, cmdToken);
+                        }
+                        argv[2] = insideCmd;
+                    }
+                }
             }
             
             
@@ -685,7 +717,10 @@ void HandleTCPClient(int clntSocket, char** commands)
                 if(argv[k] == NULL)
                     break;
             }
-            continue;
+
+            if(commandNotAllowed || badSyntax) 
+                continue;
+            
 
             /* pipe() to read the output of the command */
             if (pipe(pipefd) == -1)
@@ -715,13 +750,14 @@ void HandleTCPClient(int clntSocket, char** commands)
                 waitpid(pid, &status, 0);
                 printf("Exit status: %d\n", status);
 
-                /* Upon successful completion, mkdir shall return 0 */
+                /* Upon successful completion, bash shall return 0 */
                 if(status != 0) {
                     if (send(clntSocket, output, strlen(output), 0) != strlen(output))
                         DieWithError("send() failed");
                 }
                 else {
-                    const char* msg = "create_dir successful";
+                    char* msg = (char*)malloc(BUFFSIZE);
+                    sprintf(msg, "Successful\n%s", output);
                     if (send(clntSocket, msg, strlen(msg), 0) != strlen(msg))
                         DieWithError("send() failed");
                 }
@@ -767,18 +803,7 @@ int Login(int clntSocket, char* username, char* password) {
     token = strtok(NULL, "\n");
     strcpy(password, token);
 
-    printf("User: %s\n", username);
-    printf("Password: %s\n", password);
-
     sprintf(command, "echo %s | su %s", password, username);
-    // FILE* pipe = popen(command, "r");
-
-    // int res = pclose(pipe);
-    // printf("res of pclose: %d\n", res);
-    // if (send(clntSocket, &res, sizeof(res), 0) != sizeof(res))
-    //     DieWithError("send() failed");
-
-
 
     int pipefd[2];
     char* argv[MAXARGS];
@@ -810,21 +835,12 @@ int Login(int clntSocket, char* username, char* password) {
             memset(buffer, 0, BUFFSIZE);
         }
 
-        printf("Output: %s\n", output);
+        // printf("Output: %s\n", output);
         int status;
         waitpid(pid, &status, 0);
-        printf("Exit status: %d\n", status);
+        printf("Login exit status: %d\n", status);
 
-        /* Upon successful completion, su shall return 0*/
-        // if(status != 0) {
-        //     if (send(clntSocket, output, strlen(output), 0) != strlen(output))
-        //         DieWithError("send() failed");
-        // }
-        // else {
-        //     const char* msg = "delete_dir successful";
-        //     if (send(clntSocket, msg, strlen(msg), 0) != strlen(msg))
-        //         DieWithError("send() failed");
-        // }
+        return status;
     }
     else {
         /* Inside child */
@@ -837,31 +853,48 @@ int Login(int clntSocket, char* username, char* password) {
     }
 }
 
-void DisplayWelcome(int clntSocket, char* cwd) {
-    char welcomeMessage[BUFFSIZE * 2] = "Connected. Current path is\n"; /* Must be able to contain a path of size BUFFSIZE */
+void DisplayWelcomeMessage(int clntSocket, char* cwd) {
+    char welcomeMessage[BUFFSIZE * 2] = "Successfully logged in.\nCurrent path is:\n"; /* Must be able to contain a path of size BUFFSIZE */
     strcat(welcomeMessage, cwd);
-    printf("welcome message: %s\n", welcomeMessage);
+    printf("%s\n", welcomeMessage);
     if (send(clntSocket, welcomeMessage, strlen(welcomeMessage), 0) != strlen(welcomeMessage))
         DieWithError("send() failed");
 }
 
 char* strstrip(char *s) {
-        size_t size;
-        char *end;
+    size_t size;
+    char *end;
+    size = strlen(s);
 
-        size = strlen(s);
+    if (!size)
+            return s;
+    end = s + size - 1;
+    while (end >= s && isspace(*end))
+            end--;
+    *(end + 1) = '\0';
 
-        if (!size)
-                return s;
+    while (*s && isspace(*s))
+            s++;
+    return s;
+}
 
-        end = s + size - 1;
-        while (end >= s && isspace(*end))
-                end--;
-        *(end + 1) = '\0';
+void getUidGid(char* username, int* uid, int* gid) {
+    struct passwd *pwd = calloc(1, sizeof(struct passwd));
+    size_t buffer_len = sysconf(_SC_GETPW_R_SIZE_MAX) * sizeof(char);
+    char *buffer = malloc(buffer_len);
+    getpwnam_r(username, pwd, buffer, buffer_len, &pwd);
+    if(pwd == NULL)
+    {
+        fprintf(stderr, "getpwnam_r failed to find requested entry.\n");
+        exit(3);
+    }
+    printf("uid: %d\n", pwd->pw_uid);
+    printf("gid: %d\n", pwd->pw_gid);
+    *uid = pwd->pw_uid;
+    *gid = pwd->pw_gid;
 
-        while (*s && isspace(*s))
-                s++;
-        return s;
+    free(pwd);
+    free(buffer);
 }
 
 
