@@ -5,5 +5,5 @@
 # Commands
 echo
 cat
-sh256sum
+sha256sum
 pwd

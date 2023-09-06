@@ -27,7 +27,7 @@ void getUidGid(char* username, int* uid, int* gid);         /* Extract uid and g
 
 
 
-void HandleTCPClient(int clntSocket, char** commands, int nCmds)
+void HandleTCPClient(int clntSocket, char** commands, int nCmds, char* rootPath)
 {
     char buffer[BUFFSIZE];        /* Buffer for received message */
     int recvSize;                 /* Size of received message */
@@ -44,6 +44,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
     memset(buffer, 0, BUFFSIZE);  /* zero-ing buffer memory */
     memset(cmd, 0, MAXCMDSIZE);   /* zero-ing cmd memory */
     memset(cwd, 0, BUFFSIZE);     /* zero-ing cwd memory */
+    strcpy(cwd, rootPath);
     
     /* Initialize semaphore for lock on resources */
     const char* semName = "resource_sem";
@@ -52,42 +53,51 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
     //     DieWithError("sem_open() failed\n");
     sem_t mutex;
     sem_init(&mutex, 0, 1);
-
-
-
-    if (getcwd(cwd, sizeof(cwd)) == NULL)
-        DieWithError("getcwd() failed");
     
+
     /* Check credentials */
     int logged = 0;
-    // logged = Login(clntSocket, username, password);
+    logged = Login(clntSocket, username, password);
     
-    // char* msgLogin = (char*)malloc(32); // it's just a return code
-    // sprintf(msgLogin, "%d", logged);
+    char* msgLogin = (char*)malloc(32); // it's just a return code
+    memset(msgLogin, 0, 32);
+    sprintf(msgLogin, "%d", logged);
+    printf("sending %s\n", msgLogin);
 
-    // if (send(clntSocket, msgLogin, strlen(msgLogin), 0) != strlen(msgLogin))
-    //     DieWithError("send() failed");
-    // free(msgLogin);
+    if (send(clntSocket, msgLogin, strlen(msgLogin), 0) != strlen(msgLogin))
+        DieWithError("send() failed");
+    free(msgLogin);
     
     if (logged != 0){
         printf("Bad credentials\n");
         close(clntSocket);
         exit(1);
     }
-    else {
-        DisplayWelcomeMessage(clntSocket, cwd);
-    }
+    
+    sleep(1);
+    DisplayWelcomeMessage(clntSocket, cwd);
+    if(chdir(rootPath) != 0)
+        DieWithError("chdir() to rootPath failed");
 
     /* Get credentials and set permissions of logged user */
     int uid, gid;
-    // getUidGid(username, &uid, &gid);
-    getUidGid("cc20-sapienza", &uid, &gid);
+    getUidGid(username, &uid, &gid);
+    printf("uid: %d\n", uid);
+    printf("gid: %d\n", gid);
     if (setuid(uid) == -1)
         DieWithError("setuid() failed");
+    else
+        printf("uid set\n");
     if (setgid(gid) == -1)
         DieWithError("setgid() failed");
-
+        printf("gid set\n");
     int closeConnection = 0;
+
+    /* Set root directory */
+    if(chroot(rootPath) != 0){
+        DieWithError("chroot() failed");
+    }
+
     /* Start listening for commands */
     while(!closeConnection){
         cmd[0] = '\0';
@@ -270,7 +280,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
         else if(strcmp(cmd, "delete") == 0) {
             int pipefd[2];
             char* argv[MAXARGS];
-            argv[0] = "/bin/rm";
+            argv[0] = "/usr/bin/rm";
             argv[1] = "-f";
             int i = 2;
 
@@ -402,7 +412,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
             int pipefd[2];
             char* argv[MAXARGS];
             memset(argv, 0, MAXARGS);
-            argv[0] = "/bin/mkdir";
+            argv[0] = "/usr/bin/mkdir";
             int i = 1;
 
             /* Get command args */
@@ -476,7 +486,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
         else if(strcmp(cmd, "delete_dir") == 0) {
             int pipefd[2];
             char* argv[MAXARGS];
-            argv[0] = "/bin/rm";
+            argv[0] = "/usr/bin/rm";
             argv[1] = "-d";
             int i = 2;
 
@@ -828,7 +838,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds)
     printf("Closing connection with %d\n", getpid());
     close(clntSocket);    /* Close client socket */
     if (sem_close(&mutex) != 0)
-        DieWithError("sem_close() failed\n");
+        DieWithError("sem_close() failed");
 }
 
 
@@ -897,8 +907,8 @@ int Login(int clntSocket, char* username, char* password) {
 }
 
 void DisplayWelcomeMessage(int clntSocket, char* cwd) {
-    char welcomeMessage[BUFFSIZE * 2] = "Successfully logged in.\nCurrent path is:\n"; /* Must be able to contain a path of size BUFFSIZE */
-    strcat(welcomeMessage, cwd);
+    char* welcomeMessage = (char*)malloc(BUFFSIZE + 64); /* Must be able to contain a path of size BUFFSIZE */
+    sprintf(welcomeMessage, "Successfully logged in.\nCurrent path is:\n%s", cwd); 
     printf("%s\n", welcomeMessage);
     if (send(clntSocket, welcomeMessage, strlen(welcomeMessage), 0) != strlen(welcomeMessage))
         DieWithError("send() failed");
@@ -931,8 +941,6 @@ void getUidGid(char* username, int* uid, int* gid) {
         fprintf(stderr, "getpwnam_r failed to find requested entry.\n");
         exit(3);
     }
-    printf("uid: %d\n", pwd->pw_uid);
-    printf("gid: %d\n", pwd->pw_gid);
     *uid = pwd->pw_uid;
     *gid = pwd->pw_gid;
 

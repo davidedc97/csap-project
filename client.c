@@ -58,13 +58,14 @@ int main(int argc, char *argv[])
     if (connect(sock, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0)
         DieWithError("connect() failed");
 
-    // int logged = Login(sock, username, password);
-    // if (logged != 0){
-    //     printf("Bad credentials\n");
-    //     close(sock);
-    //     exit(1);
-    // }
+    int logged = Login(sock, username, password);
+    printf("Result: %d\n", logged);
 
+    if (logged != 0){
+        printf("Bad credentials\n");
+        close(sock);
+        exit(1);
+    }
     GetWelcomeMessage(sock);
 
     while(1){
@@ -120,7 +121,7 @@ int main(int argc, char *argv[])
                 close(sock);
                 exit(0);
             }
-            printf("Writing to %s...", outputFile);
+            printf("Writing to %s... ", outputFile);
             do {
                 buffer[bytesRcvd] = '\0';
                 fprintf(fpt, "%s\n", buffer);
@@ -128,7 +129,7 @@ int main(int argc, char *argv[])
             buffer[bytesRcvd] = '\0';
             fprintf(fpt, "%s\n", buffer);
             fclose(fpt);
-            printf(" Done\n");
+            printf("Done\n");
         }
         else{
             do {
@@ -161,10 +162,13 @@ int Login(int socket, char* username, char* password) {
     sprintf(buffer, "%s\n%s", username, password);
     if (send(socket, buffer, strlen(buffer), 0) != strlen(buffer))
             DieWithError("send() sent a different number of bytes than expected");
-
+    
     /* Get response */
+    printf("listening\n");
     bytesRcvd = recv(socket, buffer, BUFFSIZE-1, 0);
+    printf("bytesreceived: %d\n", bytesRcvd);
     buffer[bytesRcvd] = '\0';
+    printf("msg received: %s\n", buffer);
     int res = atoi(buffer);
     return res;
 }

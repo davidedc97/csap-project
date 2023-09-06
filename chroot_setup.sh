@@ -1,17 +1,15 @@
 #!/bin/bash
 
-#This script will set up the environment to be chrooted.
-
-#Set your fake root path here
-JAILPATH="/tmp/fakeroot" 
+#Root path
+ROOT_PATH="/tmp/local" 
 
 #Set the allowed binaries here
-APPS="/usr/bin/bash /bin/grep /usr/bin/rm /usr/bin/id /usr/bin/su /bin/ls /bin/pwd /bin/mv /bin/cp /usr/bin/mkdir"
+APPS="/bin/bash /usr/bin/rm /usr/bin/su /bin/cp /bin/mv /usr/bin/rm /bin/ls /usr/bin/mkdir /usr/bin/cat /usr/bin/sha256sum"
 
 PATH=/usr/bin:/bin
 
-chmod 777 $JAILPATH
-cd $JAILPATH
+chmod 777 $ROOT_PATH
+cd $ROOT_PATH
 mkdir -p dev
 mkdir -p bin
 mkdir -p lib64
@@ -21,18 +19,18 @@ mkdir -p usr/lib64
 
 if [ -e "/lib64/libnss_files.so.2" ]
 then
- cp -p /lib64/libnss_files.so.2 ${JAILPATH}/lib64/libnss_files.so.2
+ cp -p /lib64/libnss_files.so.2 ${ROOT_PATH}/lib64/libnss_files.so.2
 fi
 
 if [ -e "/lib/x86_64-linux-gnu/libnss_files.so.2" ]
 then
-  mkdir -p ${JAILPATH}/lib/x86_64-linux-gnu
-  cp -p /lib/x86_64-linux-gnu/libnss_files.so.2 ${JAILPATH}/lib/x86_64-linux-gnu/libnss_files.so.2
+  mkdir -p ${ROOT_PATH}/lib/x86_64-linux-gnu
+  cp -p /lib/x86_64-linux-gnu/libnss_files.so.2 ${ROOT_PATH}/lib/x86_64-linux-gnu/libnss_files.so.2
 fi
 
 for prog in $APPS
 do
-  cp $prog ${JAILPATH}${prog} 
+  cp $prog ${ROOT_PATH}${prog} 
   if ldd $prog > /dev/null
   then
     LIBS=`ldd $prog | grep '/lib' | sed 's/\t/ /g' | sed 's/ /\n/g' | grep "/lib"`

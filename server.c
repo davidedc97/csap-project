@@ -15,7 +15,7 @@
 #define MAXCMDS 64      /* Maximum number of additional commands */
 
 void DieWithError(char *errorMessage);                   /* Error handling function */
-void HandleTCPClient(int clntSocket, char** commands, int nCmds);                    /* TCP client handling function */
+void HandleTCPClient(int clntSocket, char** commands, int nCmds, char* rootPath);                    /* TCP client handling function */
 void ChildExitSignalHandler();                           /* Function to clean up zombie child processes */
 int CreateTCPServerSocket(unsigned short port);          /* Create TCP server socket */
 int AcceptTCPConnection(int servSock);  /* Accept TCP connection request */
@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
     rootPath[strcspn(rootPath, "\r\n")] = '\0';   // remove trailing special chars
     if(access(rootPath, F_OK) != 0){
         /* Directory does not exist. */
-        printf("token %s\n", rootPath);
+        printf("Root path: %s\n", rootPath);
         fprintf(stderr, "Root path does not exist\n");
         exit(1);
     }
@@ -82,10 +82,6 @@ int main(int argc, char *argv[])
         nCmds++;
     }
     
-    /* Set root directory */
-    if (chroot(rootPath) != 0){
-        DieWithError("chroot() failed");
-    }
 
     servSock = CreateTCPServerSocket(port);
     printf("Listening on port %d\n", port);
@@ -111,7 +107,7 @@ int main(int argc, char *argv[])
         else if (processID == 0)  /* If this is the child process */
         {
             close(servSock);   /* Child closes parent socket file descriptor */
-            HandleTCPClient(clntSock, commands, nCmds);
+            HandleTCPClient(clntSock, commands, nCmds, rootPath);
             exit(0);              /* Child process done */
         }
 

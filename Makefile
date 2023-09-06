@@ -17,5 +17,5 @@ client:client.o DieWithError.o
 
 server:server.o HandleTCPClient.o DieWithError.o CreateTCPServerSocket.o AcceptTCPConnection.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ server.o HandleTCPClient.o DieWithError.o CreateTCPServerSocket.o AcceptTCPConnection.o -lpthread
-	# sudo setcap cap_sys_chroot,cap_setuid,cap_setgid+ep ./server
+	sudo setcap "cap_sys_chroot,cap_setuid,cap_setgid=ep" ./server
 
