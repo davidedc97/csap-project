@@ -62,7 +62,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds, char* rootPath)
     char* msgLogin = (char*)malloc(32); // it's just a return code
     memset(msgLogin, 0, 32);
     sprintf(msgLogin, "%d", logged);
-    printf("sending %s\n", msgLogin);
+    // printf("sending %s\n", msgLogin);
 
     if (send(clntSocket, msgLogin, strlen(msgLogin), 0) != strlen(msgLogin))
         DieWithError("send() failed");
@@ -74,8 +74,9 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds, char* rootPath)
         exit(1);
     }
     
-    sleep(1);
+    sleep(1); // to not overlap with the return of the Login
     DisplayWelcomeMessage(clntSocket, cwd);
+
     if(chdir(rootPath) != 0)
         DieWithError("chdir() to rootPath failed");
 

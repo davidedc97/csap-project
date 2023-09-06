@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
         DieWithError("connect() failed");
 
     int logged = Login(sock, username, password);
-    printf("Result: %d\n", logged);
+    // printf("Result: %d\n", logged);
 
     if (logged != 0){
         printf("Bad credentials\n");
@@ -164,9 +164,9 @@ int Login(int socket, char* username, char* password) {
             DieWithError("send() sent a different number of bytes than expected");
     
     /* Get response */
-    printf("listening\n");
+    // printf("listening\n");
     bytesRcvd = recv(socket, buffer, BUFFSIZE-1, 0);
-    printf("bytesreceived: %d\n", bytesRcvd);
+    // printf("bytesreceived: %d\n", bytesRcvd);
     buffer[bytesRcvd] = '\0';
     printf("msg received: %s\n", buffer);
     int res = atoi(buffer);

@@ -7,7 +7,7 @@ void DieWithError(char *errorMessage);  /* Error handling function */
 int AcceptTCPConnection(int servSock)
 {
     int clntSock;                    /* Socket descriptor for client */
-    struct sockaddr_in clntAddr; /* Client address */
+    struct sockaddr_in clntAddr;     /* Client address */
     unsigned int clntLen;            /* Length of client address data structure */
 
     /* Set the size of the in-out parameter */

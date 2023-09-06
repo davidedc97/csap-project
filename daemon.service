@@ -3,7 +3,7 @@ Description=CSAP server daemon
 
 [Service]
 User=nobody
-ExecStart=/home/osboxes/Documents/shared/csap-project/server /home/osboxes/Documents/shared/csap-project/conf.txt
+ExecStart=/tmp/csap-project/server /tmp/csap-project/conf.txt
 Restart=always
 RestartSec=1
 
