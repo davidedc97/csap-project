@@ -632,6 +632,7 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds, char* rootPath)
                         for(int tmp = 0; tmp < cmdCounter; tmp++){
                             int found = 0;
                             char* cmdToken = strtok(tokenizedCmds[tmp], s);
+                            printf("Checking <%s>\n", cmdToken);
                             for(int mc = 0; mc < nCmds; mc++){
                                 if(strcmp(commands[mc], cmdToken) == 0){
                                     found = 1;
@@ -646,8 +647,9 @@ void HandleTCPClient(int clntSocket, char** commands, int nCmds, char* rootPath)
                                 if (send(clntSocket, outputMsg, strlen(outputMsg), 0) != strlen(outputMsg))
                                     DieWithError("send() failed");
                                 free(outputMsg);
+                                break;
                             }
-                            free(tokenizedCmds[tmp]);
+                            // free(tokenizedCmds[tmp]);
                         }
                             
                     }
